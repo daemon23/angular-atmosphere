@@ -1,38 +1,39 @@
 angular.module('angular.atmosphere', [])
-  .service('atmosphereService', function($rootScope){
-    var responseParameterDelegateFunctions = ['onOpen', 'onClientTimeout', 'onReopen', 'onMessage', 'onClose', 'onError'];
-    var delegateFunctions = responseParameterDelegateFunctions;
-    delegateFunctions.push('onTransportFailure');
-    delegateFunctions.push('onReconnect');
+    .service('atmosphereService', function($rootScope){
+        var wrap = function(origin, value, key) {
+            if (typeof value !== 'function')
+                return value;
+            switch (key) {
+                case 'onTransportFailure':
+                    return function (errorMessage, request) {
+                        $rootScope.$apply(function(){ origin.onTransportFailure(errorMessage, request); });
+                    }
+                case 'onReconnect':
+                    return function (request, response) {
+                        $rootScope.$apply(function(){ origin.onReconnect(request, response); });
+                    }
+                case 'onOpen':
+                case 'onReopen':
+                case 'onClose':
+                case 'onMessage':
+                case 'onClientTimeout':
+                case 'onError':
+                    return function(response) {
+                        $rootScope.$apply(function(){ origin[key](response); });
+                    }
+                default:
+                    return value;
+            }
+        }
 
-    return {
-      subscribe: function(r){
-        var result = {};
-        angular.forEach(r, function(value, property){
-          if(typeof value === 'function' && delegateFunctions.indexOf(property) >= 0){
-            if(responseParameterDelegateFunctions.indexOf(property) >= 0)
-              result[property] = function(response){
-                $rootScope.$apply(function(){
-                  r[property](response);
+        return {
+            subscribe: function(request){
+                var result = {};
+                angular.forEach(request, function(value, property){
+                    result[property] = wrap(request, value, property);
                 });
-              };
-            else if(property === 'onTransportFailure')
-              result.onTransportFailure = function(errorMsg, request){
-                $rootScope.$apply(function(){
-                  r.onTransportFailure(errorMsg, request);
-                });
-              };
-            else if(property === 'onReconnect')
-              result.onReconnect = function(request, response){
-                $rootScope.$apply(function(){
-                  r.onReconnect(request, response);
-                });
-              };
-          }else
-            result[property] = r[property];
-        });
 
-        return atmosphere.subscribe(result);
-      }
-    };
-  });
+                return atmosphere.subscribe(result);
+            }
+        };
+});
